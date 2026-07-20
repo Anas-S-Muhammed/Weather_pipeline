@@ -4,7 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from api.database import engine, get_db
+from api.database import get_db
 from api import models, schemas
 
 app = FastAPI(title="Weather API", version="1.0")
