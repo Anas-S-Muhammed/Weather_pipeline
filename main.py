@@ -1,12 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException, Query, status
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from api.database import engine, get_db
 from api import models, schemas
-
-# Create tables
-models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Weather API", version="1.0")
 
@@ -14,6 +13,16 @@ app = FastAPI(title="Weather API", version="1.0")
 @app.get("/")
 async def root():
     return {"status": "Weather API is running", "version": "1.0"}
+
+
+@app.get("/health")
+def health_check(db: Session = Depends(get_db)):
+    """Report whether the API can reach its PostgreSQL database."""
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail="Database is unavailable") from exc
+    return {"status": "ok", "database": "connected"}
 
 @app.get("/weather/{city}", response_model=schemas.WeatherResponse)
 def get_weather(
