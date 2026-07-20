@@ -86,3 +86,5 @@ async def get_stats(db: Session = Depends(get_db)):
         "total_cities": city_count,
         "total_readings": reading_count
     }
+
+    
