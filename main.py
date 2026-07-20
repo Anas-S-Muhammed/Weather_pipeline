@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 import psycopg2
 
+
 from database import engine, get_db
 import models
 import schemas
@@ -87,4 +88,3 @@ async def get_stats(db: Session = Depends(get_db)):
         "total_readings": reading_count
     }
 
-    
