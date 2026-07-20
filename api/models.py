@@ -1,6 +1,6 @@
 from sqlalchemy import Column, String, Float, Integer, DateTime, ForeignKey, UUID
 from sqlalchemy.orm import relationship
-from database import Base
+from .database import Base
 from datetime import datetime
 import uuid
 
@@ -25,6 +25,6 @@ class WeatherReading(Base):
     humidity = Column(Integer)
     condition = Column(String, nullable=False)
     wind_speed = Column(Float)
-    recorded_at = Column(DateTime, default=datetime.now)
+    recorded_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
     city = relationship("City", back_populates="weather_readings")

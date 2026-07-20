@@ -1,13 +1,9 @@
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-import psycopg2
-
-
-from database import engine, get_db
-import models
-import schemas
+from api.database import engine, get_db
+from api import models, schemas
 
 # Create tables
 models.Base.metadata.create_all(bind=engine)
@@ -20,7 +16,7 @@ async def root():
     return {"status": "Weather API is running", "version": "1.0"}
 
 @app.get("/weather/{city}", response_model=schemas.WeatherResponse)
-async def get_weather(
+def get_weather(
     city: str, 
     forecast_hours: Optional[int] = Query(24, ge=1, le=168),
     db: Session = Depends(get_db)
@@ -28,7 +24,7 @@ async def get_weather(
     """Get current weather and forecast for a city"""
     
     # Get city
-    city_obj = db.query(models.City).filter(models.City.name.ilike(city)).first()
+    city_obj = db.query(models.City).filter(models.City.name.ilike(city.strip())).first()
     if not city_obj:
         raise HTTPException(status_code=404, detail=f"City '{city}' not found")
     
@@ -41,7 +37,7 @@ async def get_weather(
         raise HTTPException(status_code=404, detail=f"No weather data for '{city}'")
     
     # Get forecast history
-    cutoff = datetime.now() - timedelta(hours=forecast_hours)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=forecast_hours)
     forecast = db.query(models.WeatherReading).filter(
         models.WeatherReading.city_id == city_obj.id,
         models.WeatherReading.recorded_at >= cutoff,
@@ -56,12 +52,12 @@ async def get_weather(
     )
 
 @app.get("/cities", response_model=list[schemas.City])
-async def list_cities(db: Session = Depends(get_db)):
+def list_cities(db: Session = Depends(get_db)):
     """List all tracked cities"""
     return db.query(models.City).order_by(models.City.name).all()
 
-@app.post("/cities", response_model=schemas.City)
-async def add_city(city: schemas.CityCreate, db: Session = Depends(get_db)):
+@app.post("/cities", response_model=schemas.City, status_code=status.HTTP_201_CREATED)
+def add_city(city: schemas.CityCreate, db: Session = Depends(get_db)):
     """Add a new city to track"""
     existing = db.query(models.City).filter(
         models.City.name == city.name,
@@ -78,7 +74,7 @@ async def add_city(city: schemas.CityCreate, db: Session = Depends(get_db)):
     return db_city
 
 @app.get("/stats")
-async def get_stats(db: Session = Depends(get_db)):
+def get_stats(db: Session = Depends(get_db)):
     """Get database statistics"""
     city_count = db.query(models.City).count()
     reading_count = db.query(models.WeatherReading).count()
