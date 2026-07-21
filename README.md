@@ -21,10 +21,10 @@ OpenWeatherMap API
 fetch_weather.py  --->  PostgreSQL (cities, weather_readings)
                                   |
                                   v
-                           FastAPI (main.py)
+                    FastAPI (main.py + index.html)
                                   |
                                   v
-                        /docs, clients, dashboards
+                  browser dashboard, /docs, clients
 ```
 
 `fetch_weather.py` is the ingestion job. `main.py` is the read API. Keeping them separate makes it safe to run ingestion on a schedule without coupling it to web traffic.
@@ -37,7 +37,8 @@ fetch_weather.py  --->  PostgreSQL (cities, weather_readings)
 │   ├── database.py       # SQLAlchemy engine and session dependency
 │   ├── models.py         # ORM table models
 │   └── schemas.py        # API request and response models
-├── main.py               # FastAPI application and routes
+├── main.py               # FastAPI routes and dashboard delivery
+├── index.html            # Weather Station browser dashboard
 ├── fetch_weather.py      # OpenWeatherMap ingestion job
 ├── schema.sql            # PostgreSQL schema bootstrap
 ├── seed.sql              # Initial tracked cities
@@ -108,7 +109,7 @@ The seed file adds London, New York, Tokyo, Paris, and Sydney. It is safe to run
 python -m uvicorn main:app --reload
 ```
 
-Open the interactive API documentation at <http://127.0.0.1:8000/docs>.
+Open the Weather Station dashboard at <http://127.0.0.1:8000/>. The dashboard is served by FastAPI and calls the API through the same origin. Open the interactive API documentation at <http://127.0.0.1:8000/docs>.
 
 Verify the database connection:
 
@@ -136,7 +137,8 @@ The job reads all tracked cities, fetches their current conditions, and inserts 
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/` | API status and version |
+| `GET` | `/` | Weather Station dashboard |
+| `GET` | `/api` | API status and version |
 | `GET` | `/health` | Database connectivity check; returns `503` when unavailable |
 | `GET` | `/cities` | List tracked cities |
 | `POST` | `/cities` | Add a city to track |
@@ -173,6 +175,28 @@ One row per ingestion event, linked to `cities` through `city_id`. It stores tem
 This append-only design preserves history and makes later analytics—daily averages, trend analysis, anomaly detection, or dashboarding—straightforward.
 
 ## Operations
+
+### Run the final local version
+
+Once the database, `.env`, and dependencies are configured, use two PowerShell windows from the project directory.
+
+**Window 1 — populate weather data**
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python fetch_weather.py
+```
+
+**Window 2 — run the application**
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn main:app --reload
+```
+
+Then open <http://127.0.0.1:8000/>. The dashboard shows every tracked city and its most recent stored reading; select a city to see its stored history. Use `/docs` for the raw API and `/health` to diagnose database connectivity.
+
+If you want fresh readings while the dashboard is open, run `python fetch_weather.py` again. The dashboard refreshes its city cards every 60 seconds.
 
 ### Schedule ingestion
 
