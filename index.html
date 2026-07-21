@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weather Station</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep: #10161F;
+    --bg-panel: #182230;
+    --bg-panel-hover: #1E2A3A;
+    --text-primary: #E7ECF2;
+    --text-muted: #8CA0B3;
+    --accent-sky: #5FA8D3;
+    --accent-amber: #E3A64F;
+    --accent-green: #7FB88F;
+    --line: #2A3644;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    padding: 32px 24px 80px;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  /* ---------- Header ---------- */
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding-bottom: 28px;
+  }
+
+  .station-mark {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .station-mark h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: -0.02em;
+  }
+
+  .station-mark span.tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--accent-sky);
+    border: 1px solid var(--accent-sky);
+    border-radius: 4px;
+    padding: 2px 8px;
+    letter-spacing: 0.04em;
+  }
+
+  #sync-status {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: right;
+  }
+
+  #sync-status .dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    margin-right: 6px;
+  }
+
+  #sync-status .dot.stale { background: var(--accent-amber); }
+  #sync-status .dot.error { background: #D3695F; }
+
+  /* ---------- Isobar divider (signature element) ---------- */
+  .isobar {
+    width: 100%;
+    height: 22px;
+    margin: 4px 0 28px;
+    opacity: 0.55;
+  }
+
+  /* ---------- City grid ---------- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 14px;
+    margin-bottom: 36px;
+  }
+
+  .card {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 18px 16px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  }
+
+  .card:hover {
+    background: var(--bg-panel-hover);
+    border-color: var(--accent-sky);
+  }
+
+  .card:focus-visible {
+    outline: 2px solid var(--accent-sky);
+    outline-offset: 2px;
+  }
+
+  .card.selected {
+    border-color: var(--accent-sky);
+    background: var(--bg-panel-hover);
+  }
+
+  .card .city-name {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+  }
+
+  .card .city-country {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
+  }
+
+  .card .temp-reading {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 40px;
+    font-weight: 500;
+    line-height: 1.1;
+    margin: 10px 0 4px;
+  }
+
+  .card .condition {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  .card .substats {
+    display: flex;
+    gap: 14px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .card .substats b { color: var(--text-primary); font-weight: 500; }
+
+  .card .no-data {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+  }
+
+  /* ---------- History panel ---------- */
+  .history-panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 22px 24px 26px;
+    display: none;
+  }
+
+  .history-panel.active { display: block; }
+
+  .history-panel h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 17px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .history-panel .subline {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 18px;
+  }
+
+  #sparkline-wrap { margin-bottom: 18px; }
+
+  table.history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+  }
+
+  table.history-table th {
+    text-align: left;
+    color: var(--text-muted);
+    font-weight: 500;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    letter-spacing: 0.04em;
+  }
+
+  table.history-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    color: var(--text-primary);
+  }
+
+  table.history-table tr:last-child td { border-bottom: none; }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+  }
+
+  .empty-state .big {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 18px;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+
+  .empty-state code {
+    font-family: 'IBM Plex Mono', monospace;
+    background: var(--bg-panel);
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="station-mark">
+      <h1>Weather Station</h1>
+      <span class="tag">LIVE</span>
+    </div>
+    <div id="sync-status"><span class="dot"></span>connecting...</div>
+  </header>
+
+  <svg class="isobar" viewBox="0 0 1080 22" preserveAspectRatio="none">
+    <path d="M0,11 C90,2 180,20 270,11 C360,2 450,20 540,11 C630,2 720,20 810,11 C900,2 990,20 1080,11"
+          fill="none" stroke="#5FA8D3" stroke-width="1"/>
+    <path d="M0,15 C90,7 180,23 270,15 C360,7 450,23 540,15 C630,7 720,23 810,15 C900,7 990,23 1080,15"
+          fill="none" stroke="#2A3644" stroke-width="1"/>
+  </svg>
+
+  <div id="grid" class="grid"></div>
+
+  <div id="history-panel" class="history-panel">
+    <h2 id="history-title">—</h2>
+    <div class="subline" id="history-subline">—</div>
+    <div id="sparkline-wrap"></div>
+    <table class="history-table">
+      <thead>
+        <tr><th>Time</th><th>Temp</th><th>Feels Like</th><th>Condition</th><th>Humidity</th><th>Wind</th></tr>
+      </thead>
+      <tbody id="history-body"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  // ---- Config ----
+  const API_BASE = "http://127.0.0.1:8000";
+
+  const grid = document.getElementById("grid");
+  const syncStatus = document.getElementById("sync-status");
+  const historyPanel = document.getElementById("history-panel");
+  const historyTitle = document.getElementById("history-title");
+  const historySubline = document.getElementById("history-subline");
+  const historyBody = document.getElementById("history-body");
+  const sparklineWrap = document.getElementById("sparkline-wrap");
+
+  let selectedCity = null;
+
+  function setSync(state, label) {
+    const dotClass = state === "ok" ? "" : state === "stale" ? "stale" : "error";
+    syncStatus.innerHTML = `<span class="dot ${dotClass}"></span>${label}`;
+  }
+
+  function timeAgo(isoString) {
+    const diffMs = Date.now() - new Date(isoString).getTime();
+    const mins = Math.round(diffMs / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.round(mins / 60);
+    return `${hrs}h ago`;
+  }
+
+  function formatTime(isoString) {
+    const d = new Date(isoString);
+    return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+
+  async function fetchJSON(path) {
+    const res = await fetch(`${API_BASE}${path}`);
+    if (!res.ok) throw new Error(`${res.status}`);
+    return res.json();
+  }
+
+  function renderEmptyState(message, hint) {
+    grid.innerHTML = `
+      <div class="empty-state" style="grid-column: 1 / -1;">
+        <div class="big">${message}</div>
+        <div>${hint}</div>
+      </div>`;
+  }
+
+  async function loadCities() {
+    let cities;
+    try {
+      cities = await fetchJSON("/cities");
+    } catch (err) {
+      setSync("error", "API unreachable");
+      renderEmptyState(
+        "Can't reach the API",
+        `Make sure the FastAPI server is running at <code>${API_BASE}</code> and CORS is enabled.`
+      );
+      return;
+    }
+
+    if (!cities.length) {
+      setSync("ok", "connected · no cities tracked");
+      renderEmptyState("No cities tracked yet", "Add one via <code>POST /cities</code>.");
+      return;
+    }
+
+    grid.innerHTML = "";
+    let anyData = false;
+
+    for (const city of cities) {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.tabIndex = 0;
+      card.dataset.cityName = city.name;
+
+      let latest = null;
+      try {
+        const weather = await fetchJSON(`/weather/${encodeURIComponent(city.name)}?forecast_hours=24`);
+        latest = weather.current;
+        anyData = true;
+      } catch (err) {
+        // No data yet for this city — render the card without a reading
+      }
+
+      if (latest) {
+        card.innerHTML = `
+          <div class="city-name">${city.name}</div>
+          <div class="city-country">${city.country}</div>
+          <div class="temp-reading">${Math.round(latest.temperature)}°</div>
+          <div class="condition">${latest.condition}</div>
+          <div class="substats">
+            <span>Feels <b>${Math.round(latest.feels_like ?? latest.temperature)}°</b></span>
+            <span>Hum <b>${latest.humidity ?? "—"}%</b></span>
+            <span>Wind <b>${latest.wind_speed ?? "—"} m/s</b></span>
+          </div>
+          <div class="no-data" style="margin-top:8px;">${timeAgo(latest.recorded_at)}</div>
+        `;
+      } else {
+        card.innerHTML = `
+          <div class="city-name">${city.name}</div>
+          <div class="city-country">${city.country}</div>
+          <div class="no-data">No readings yet — run fetch_weather.py</div>
+        `;
+      }
+
+      card.addEventListener("click", () => selectCity(city.name));
+      card.addEventListener("keypress", (e) => { if (e.key === "Enter") selectCity(city.name); });
+
+      grid.appendChild(card);
+    }
+
+    setSync(anyData ? "ok" : "stale", anyData ? "connected · synced" : "connected · awaiting data");
+  }
+
+  function renderSparkline(readings) {
+    if (readings.length < 2) {
+      sparklineWrap.innerHTML = "";
+      return;
+    }
+    const temps = readings.map(r => r.temperature).reverse();
+    const w = 600, h = 60, pad = 6;
+    const min = Math.min(...temps), max = Math.max(...temps);
+    const range = max - min || 1;
+
+    const points = temps.map((t, i) => {
+      const x = pad + (i / (temps.length - 1)) * (w - pad * 2);
+      const y = h - pad - ((t - min) / range) * (h - pad * 2);
+      return `${x},${y}`;
+    }).join(" ");
+
+    sparklineWrap.innerHTML = `
+      <svg viewBox="0 0 ${w} ${h}" style="width:100%; height:60px;" preserveAspectRatio="none">
+        <polyline points="${points}" fill="none" stroke="#5FA8D3" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      </svg>`;
+  }
+
+  async function selectCity(name) {
+    selectedCity = name;
+    document.querySelectorAll(".card").forEach(c => {
+      c.classList.toggle("selected", c.dataset.cityName === name);
+    });
+
+    let weather;
+    try {
+      weather = await fetchJSON(`/weather/${encodeURIComponent(name)}?forecast_hours=168`);
+    } catch (err) {
+      historyPanel.classList.add("active");
+      historyTitle.textContent = name;
+      historySubline.textContent = "No history available for this city yet.";
+      historyBody.innerHTML = "";
+      sparklineWrap.innerHTML = "";
+      return;
+    }
+
+    const allReadings = [weather.current, ...(weather.forecast || [])];
+
+    historyPanel.classList.add("active");
+    historyTitle.textContent = `${weather.city}, ${weather.country}`;
+    historySubline.textContent = `${allReadings.length} reading${allReadings.length === 1 ? "" : "s"} · last 7 days`;
+
+    renderSparkline(allReadings);
+
+    historyBody.innerHTML = allReadings.map(r => `
+      <tr>
+        <td>${formatTime(r.recorded_at)}</td>
+        <td>${r.temperature.toFixed(1)}°C</td>
+        <td>${r.feels_like != null ? r.feels_like.toFixed(1) + "°C" : "—"}</td>
+        <td>${r.condition}</td>
+        <td>${r.humidity ?? "—"}%</td>
+        <td>${r.wind_speed ?? "—"} m/s</td>
+      </tr>
+    `).join("");
+
+    historyPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  loadCities();
+  setInterval(loadCities, 60000); // refresh every 60s
+</script>
+</body>
+</html>
