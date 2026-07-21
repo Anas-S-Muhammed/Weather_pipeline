@@ -281,7 +281,7 @@
 
 <script>
   // ---- Config ----
-  const API_BASE = "http://127.0.0.1:8000";
+  const API_BASE = window.location.origin;
 
   const grid = document.getElementById("grid");
   const syncStatus = document.getElementById("sync-status");
@@ -334,7 +334,7 @@
       setSync("error", "API unreachable");
       renderEmptyState(
         "Can't reach the API",
-        `Make sure the FastAPI server is running at <code>${API_BASE}</code> and CORS is enabled.`
+        `Make sure the FastAPI server is running at <code>${API_BASE}</code>.`
       );
       return;
     }

@@ -1,4 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI, Depends, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -9,18 +13,24 @@ from api import models, schemas
 
 app = FastAPI(title="Weather API", version="1.0")
 
-from fastapi.middleware.cors import CORSMiddleware
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://127.0.0.1:8000", "http://localhost:8000"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+PROJECT_DIR = Path(__file__).resolve().parent
+
 # ---------- API Endpoints ----------
 @app.get("/")
-async def root():
+def dashboard():
+    """Serve the Weather Station dashboard."""
+    return FileResponse(PROJECT_DIR / "index.html")
+
+
+@app.get("/api")
+def api_status():
     return {"status": "Weather API is running", "version": "1.0"}
 
 
