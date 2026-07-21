@@ -9,6 +9,15 @@ from api import models, schemas
 
 app = FastAPI(title="Weather API", version="1.0")
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # ---------- API Endpoints ----------
 @app.get("/")
 async def root():
