@@ -101,7 +101,7 @@ psql -U postgres -d weather_db -f schema.sql
 psql -U postgres -d weather_db -f seed.sql
 ```
 
-The seed file adds London, New York, Tokyo, Paris, and Sydney. It is safe to run again because duplicate city/country pairs are ignored.
+The seed file adds 30 cities across Asia-Pacific, Europe, Africa, the Americas, and the Middle East. It is safe to run again because duplicate city/country pairs are ignored.
 
 ### 5. Start the API
 
