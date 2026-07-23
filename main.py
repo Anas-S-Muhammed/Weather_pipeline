@@ -11,6 +11,8 @@ from typing import Optional
 from api.database import get_db
 from api import models, schemas
 
+
+
 app = FastAPI(title="Weather API", version="1.0")
 
 app.add_middleware(
