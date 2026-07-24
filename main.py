@@ -73,6 +73,8 @@ def get_weather(
         models.WeatherReading.id != current.id
     ).order_by(models.WeatherReading.recorded_at.desc()).limit(48).all()
     
+
+    
     return schemas.WeatherResponse(
         city=city_obj.name,
         country=city_obj.country,
