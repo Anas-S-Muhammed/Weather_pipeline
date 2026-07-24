@@ -51,7 +51,7 @@ def get_weather(
     db: Session = Depends(get_db)
 ):
     """Get current weather and forecast for a city"""
-    
+
     # Get city
     city_obj = db.query(models.City).filter(models.City.name.ilike(city.strip())).first()
     if not city_obj:
