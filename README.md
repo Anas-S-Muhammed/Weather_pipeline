@@ -1,33 +1,53 @@
 # Weather Pipeline
 
-A small, local-first weather data pipeline. It collects current conditions from OpenWeatherMap, stores each reading in PostgreSQL, and exposes the stored data through a FastAPI service.
+> An end-to-end weather data pipeline that ingests live OpenWeatherMap conditions into PostgreSQL and exposes stored readings through a FastAPI service and browser dashboard.
 
-The project is designed as a practical foundation for data engineering work: ingestion is separate from serving, the database is the source of truth, and the API provides a simple interface for applications, dashboards, or analysis notebooks.
+## Value proposition
 
-## What it does
+Weather Pipeline demonstrates a complete data application rather than a one-off API call: ingestion is separated from serving, locations are modeled relationally, successful observations are retained as history, and clients can query the latest reading alongside recent stored observations. The repository includes a dashboard, seed data, health checks, and interactive FastAPI documentation.
 
-- Tracks a configurable list of cities and their coordinates.
-- Fetches current weather conditions from OpenWeatherMap.
-- Appends each result to PostgreSQL as a timestamped weather reading.
-- Provides endpoints to inspect tracked cities, the latest reading for a city, recent reading history, and database totals.
-- Exposes a health check that verifies API-to-database connectivity.
+## Overview
 
-## Architecture
+The project has two cooperating processes:
 
-```text
-OpenWeatherMap API
-        |
-        v
-fetch_weather.py  --->  PostgreSQL (cities, weather_readings)
-                                  |
-                                  v
-                    FastAPI (main.py + index.html)
-                                  |
-                                  v
-                  browser dashboard, /docs, clients
+1. `fetch_weather.py` reads tracked cities from PostgreSQL, calls the OpenWeatherMap current-weather endpoint using latitude/longitude, and inserts a reading for each successful city.
+2. `main.py` serves `index.html` and a FastAPI API that reads cities and weather history from PostgreSQL.
+
+The database separates `cities` from append-only `weather_readings`. A city is unique by `(name, country)`; each reading stores temperature, feels-like temperature, humidity, textual condition, wind speed, and capture time. `seed.sql` provides 29 initial cities across Asia-Pacific, Europe, Africa, the Americas, and the Middle East.
+
+## Workflow
+
+```mermaid
+flowchart LR
+    A[Seed or add cities] --> B[(PostgreSQL cities)]
+    B --> C[fetch_weather.py]
+    C --> D[OpenWeatherMap current weather API]
+    D --> E[(PostgreSQL weather_readings)]
+    E --> F[FastAPI main.py]
+    F --> G[Weather Station index.html]
+    F --> H[REST clients /docs /health]
 ```
 
-`fetch_weather.py` is the ingestion job. `main.py` is the read API. Keeping them separate makes it safe to run ingestion on a schedule without coupling it to web traffic.
+## Features
+
+- **Live ingestion:** fetches metric-unit current conditions for every tracked city and inserts one reading per successful response.
+- **Historical storage:** appends observations to PostgreSQL rather than overwriting the latest value.
+- **FastAPI service:** uses Pydantic response models, SQLAlchemy sessions, local CORS configuration, and automatic Swagger UI at `/docs`.
+- **Browser dashboard:** displays city cards, latest readings, selectable recent history, and refreshes city cards every 60 seconds.
+- **Operational endpoints:** `/health` checks database connectivity and returns `503` when PostgreSQL is unavailable; `/stats` reports city and reading totals.
+- **Extensible tracking:** lists tracked locations and accepts new cities with name, country, latitude, and longitude.
+
+## Tech stack
+
+| Area | Implementation |
+| --- | --- |
+| Language | Python |
+| Web API | FastAPI, Uvicorn |
+| Validation | Pydantic |
+| Persistence | PostgreSQL, SQLAlchemy, `psycopg2-binary` |
+| External data source | OpenWeatherMap Current Weather API (`/data/2.5/weather`) |
+| HTTP/configuration | Requests, `python-dotenv` |
+| Frontend | Static HTML/CSS/JavaScript served by FastAPI |
 
 ## Repository layout
 
@@ -35,7 +55,7 @@ fetch_weather.py  --->  PostgreSQL (cities, weather_readings)
 .
 ├── api/
 │   ├── database.py       # SQLAlchemy engine and session dependency
-│   ├── models.py         # ORM table models
+│   ├── models.py         # City and WeatherReading ORM models
 │   └── schemas.py        # API request and response models
 ├── main.py               # FastAPI routes and dashboard delivery
 ├── index.html            # Weather Station browser dashboard
@@ -46,17 +66,17 @@ fetch_weather.py  --->  PostgreSQL (cities, weather_readings)
 └── .env.example          # Environment-variable template
 ```
 
-## Prerequisites
+## Setup
+
+### Prerequisites
 
 - Python 3.11 or later
 - PostgreSQL 18 (or a compatible PostgreSQL version)
 - An [OpenWeatherMap API key](https://openweathermap.org/api)
 
-## Quick start
-
 The commands below use PowerShell on Windows.
 
-### 1. Create and activate a virtual environment
+### 1. Install dependencies
 
 ```powershell
 python -m venv .venv
@@ -65,23 +85,25 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-### 2. Create the database
+### 2. Create and initialize PostgreSQL
 
-Create `weather_db` once. If `createdb` is not on your PATH, use the PostgreSQL installation directory instead.
+Create `weather_db`, then apply the checked-in schema and seed files:
 
 ```powershell
 createdb -U postgres weather_db
+psql -U postgres -d weather_db -f schema.sql
+psql -U postgres -d weather_db -f seed.sql
 ```
 
-### 3. Configure local environment variables
+`schema.sql` enables `pgcrypto` for UUID defaults and creates `cities` and `weather_readings`. `seed.sql` uses `ON CONFLICT (name, country) DO NOTHING`, so rerunning it does not duplicate cities.
 
-Copy the template:
+### 3. Configure environment variables
+
+Copy `.env.example` to `.env` and replace the placeholders:
 
 ```powershell
 Copy-Item .env.example .env
 ```
-
-Edit `.env` with real local values:
 
 ```env
 DB_HOST=localhost
@@ -92,68 +114,57 @@ DB_PASSWORD=your_postgres_password
 OPENWEATHER_API_KEY=your_openweathermap_api_key
 ```
 
-Never commit `.env`. It is ignored by Git because it contains credentials. The older `OWN_API` variable is accepted for compatibility, but `OPENWEATHER_API_KEY` is the supported name.
+`.env` is ignored by Git because it contains credentials. The ingestion script also accepts legacy `OWN_API` as a fallback, but `OPENWEATHER_API_KEY` is the supported name. Never commit secrets.
 
-### 4. Create tables and seed cities
+## Usage
 
-```powershell
-psql -U postgres -d weather_db -f schema.sql
-psql -U postgres -d weather_db -f seed.sql
-```
-
-The seed file adds 30 cities across Asia-Pacific, Europe, Africa, the Americas, and the Middle East. It is safe to run again because duplicate city/country pairs are ignored.
-
-### 5. Start the API
+Start the API from the repository root:
 
 ```powershell
 python -m uvicorn main:app --reload
 ```
 
-Open the Weather Station dashboard at <http://127.0.0.1:8000/>. The dashboard is served by FastAPI and calls the API through the same origin. Open the interactive API documentation at <http://127.0.0.1:8000/docs>.
-
-Verify the database connection:
+Open the dashboard at <http://127.0.0.1:8000/> and interactive API documentation at <http://127.0.0.1:8000/docs>. Verify the database connection:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/health
 ```
 
-Expected result:
+Expected response:
 
 ```json
 {"status":"ok","database":"connected"}
 ```
 
-### 6. Ingest weather data
-
-In a second PowerShell window with the virtual environment active:
+In a second terminal with the virtual environment active, populate readings:
 
 ```powershell
 python fetch_weather.py
 ```
 
-The job reads all tracked cities, fetches their current conditions, and inserts one reading per successful city. Run it repeatedly to build a historical dataset.
+The job reads all tracked cities, fetches current conditions, and inserts one reading per successful city. Run it repeatedly to build a historical dataset. For regular collection, schedule this command with Windows Task Scheduler, cron, or a workflow orchestrator; scheduling is not implemented inside this repository.
 
 ## API reference
 
-| Method | Path | Purpose |
+| Method | Path | Behavior |
 | --- | --- | --- |
-| `GET` | `/` | Weather Station dashboard |
-| `GET` | `/api` | API status and version |
-| `GET` | `/health` | Database connectivity check; returns `503` when unavailable |
-| `GET` | `/cities` | List tracked cities |
-| `POST` | `/cities` | Add a city to track |
-| `GET` | `/weather/{city}` | Latest reading and recent reading history for a city |
-| `GET` | `/stats` | City and reading totals |
+| `GET` | `/` | Serves the Weather Station dashboard |
+| `GET` | `/api` | Returns API status and version `1.0` |
+| `GET` | `/health` | Checks PostgreSQL connectivity; returns `503` if unavailable |
+| `GET` | `/cities` | Lists tracked cities ordered by name |
+| `POST` | `/cities` | Adds a city; duplicate name/country pairs return `400` |
+| `GET` | `/weather/{city}` | Returns the latest stored reading and recent stored readings |
+| `GET` | `/stats` | Returns total city and reading counts |
 
-### Get weather for a city
+Example query:
 
 ```powershell
 Invoke-RestMethod "http://127.0.0.1:8000/weather/London?forecast_hours=24"
 ```
 
-`forecast_hours` accepts values from `1` to `168`. Despite the field name, the API currently returns **stored readings from the preceding time window**, not a provider-generated future forecast.
+`forecast_hours` accepts values from 1 to 168. Despite the field name, the implementation returns stored readings from the preceding time window; it does **not** generate future forecasts. A city with no stored reading returns `404`.
 
-### Add a city
+Example city creation:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/cities `
@@ -166,96 +177,29 @@ Invoke-RestMethod http://127.0.0.1:8000/cities `
 
 ### `cities`
 
-One row per tracked location. A city is unique by `(name, country)` and includes its latitude and longitude.
+One row per tracked location, with name, country, latitude, and longitude. PostgreSQL enforces uniqueness for `(name, country)`.
 
 ### `weather_readings`
 
-One row per ingestion event, linked to `cities` through `city_id`. It stores temperature, perceived temperature, humidity, text condition, wind speed, and the time the reading was recorded.
+One row per ingestion event, linked to `cities` through `city_id`. It stores temperature, perceived temperature, humidity, condition, wind speed, and `recorded_at`. The append-only design preserves history for later analytics.
 
-This append-only design preserves history and makes later analytics—daily averages, trend analysis, anomaly detection, or dashboarding—straightforward.
+## Current status and honest limitations
 
-## Operations
+The repository contains the FastAPI service, dashboard, PostgreSQL schema, seed data, and ingestion script needed for local deployment. PostgreSQL credentials and a valid OpenWeatherMap API key are required before live readings can be collected. The checked-in code does not include automated tests, migrations, Docker/Compose configuration, CI workflows, or an internal scheduler. No model training or predictive evaluation is present: this is an ingestion, storage, and serving pipeline, not an ML forecasting system.
 
-### Run the final local version
+## Future improvements
 
-Once the database, `.env`, and dependencies are configured, use two PowerShell windows from the project directory.
-
-**Window 1 — populate weather data**
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python fetch_weather.py
-```
-
-**Window 2 — run the application**
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python -m uvicorn main:app --reload
-```
-
-Then open <http://127.0.0.1:8000/>. The dashboard shows every tracked city and its most recent stored reading; select a city to see its stored history. Use `/docs` for the raw API and `/health` to diagnose database connectivity.
-
-If you want fresh readings while the dashboard is open, run `python fetch_weather.py` again. The dashboard refreshes its city cards every 60 seconds.
-
-### Schedule ingestion
-
-For local development, run `python fetch_weather.py` manually. For regular collection, schedule the same command with Windows Task Scheduler, cron, or a workflow orchestrator. A sensible first cadence is every 30–60 minutes; choose a rate that fits your OpenWeatherMap plan.
-
-### Check service health
-
-Use `/health` for a lightweight readiness check. A `200` means the API and database can communicate. A `503` usually indicates that PostgreSQL is stopped, credentials in `.env` are wrong, or the configured database does not exist.
-
-### Change PostgreSQL credentials
-
-If the PostgreSQL password changes, update `DB_PASSWORD` in `.env` and restart Uvicorn. Do not put passwords into source files or commit them to Git.
-
-## Troubleshooting
-
-### `Database is unavailable` or `/health` returns `503`
-
-1. Confirm the PostgreSQL Windows service is running.
-2. Verify `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` in `.env`.
-3. Test the same credentials directly:
-
-   ```powershell
-   & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -h 127.0.0.1 -U postgres -d weather_db
-   ```
-
-4. Restart the API after changing `.env`.
-
-### `City '...' not found`
-
-Add it through `POST /cities`, or insert it into `cities` with valid latitude and longitude.
-
-### `No weather data for '...'`
-
-The city exists but has no readings yet. Run:
-
-```powershell
-python fetch_weather.py
-```
-
-### OpenWeatherMap request fails
-
-Confirm `OPENWEATHER_API_KEY` is set and active. The ingestion job prints a per-city failure and continues with the remaining cities.
-
-## Development roadmap
-
-The current project is intentionally compact. Strong next steps are:
+The existing roadmap identifies these next steps:
 
 1. Add automated tests for routes, validation, and ingestion failures.
 2. Add Alembic migrations instead of applying `schema.sql` manually.
 3. Schedule ingestion with retry/backoff and structured logs.
-4. Store all timestamps as timezone-aware UTC values.
+4. Store timestamps as timezone-aware UTC values.
 5. Add pagination and date-range filters for large reading histories.
 6. Add a true forecast table/endpoint using OpenWeatherMap forecast data.
 7. Containerize the API and PostgreSQL with Docker Compose.
 8. Add CI checks for formatting, tests, and dependency security.
 
-## Current implementation status
+## Troubleshooting
 
-- PostgreSQL connectivity is configured and verified through `/health`.
-- The FastAPI service can be started with Uvicorn.
-- The schema and seed data provide the initial database state.
-- The ingestion script is ready to populate historical weather readings once a valid OpenWeatherMap API key is configured.
+If `/health` returns `503`, confirm PostgreSQL is running and that `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` match the local database. After changing `.env`, restart Uvicorn. If ingestion fails, confirm that `OPENWEATHER_API_KEY` is present and active; the script prints a failure for the affected city and continues with the remaining cities.
